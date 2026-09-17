@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1b1b1f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Blender Phone Control</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="login" class="overlay">
+  <form id="login-form" class="card">
+    <h1>Blender</h1>
+    <p>Enter the PIN shown in Blender's sidebar (N &rsaquo; Phone).</p>
+    <input id="pin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" autocomplete="one-time-code" autofocus>
+    <button type="submit" class="primary">Connect</button>
+    <div id="login-error" class="error"></div>
+  </form>
+</div>
+
+<header id="top">
+  <span id="file">&hellip;</span>
+  <span id="conn" class="dot"></span>
+  <button id="btn-undo" data-action="undo" title="Undo">&#8630;</button>
+  <button id="btn-redo" data-action="redo" title="Redo">&#8631;</button>
+  <button id="btn-save" data-action="save" title="Save">&#9921;</button>
+</header>
+
+<main id="viewport">
+  <img id="preview" alt="" draggable="false">
+  <div id="vp-hud">
+    <span id="hud-shading"></span>
+    <span id="hud-persp"></span>
+  </div>
+  <div id="vp-hint">1 finger orbit &middot; 2 fingers pan &middot; pinch zoom</div>
+</main>
+
+<section id="panel">
+
+  <div class="tab" data-tab="view">
+    <div class="grid3">
+      <button data-action="view" data-name="front">Front</button>
+      <button data-action="view" data-name="right">Right</button>
+      <button data-action="view" data-name="top">Top</button>
+      <button data-action="view" data-name="back">Back</button>
+      <button data-action="view" data-name="left">Left</button>
+      <button data-action="view" data-name="bottom">Bottom</button>
+      <button data-action="view" data-name="camera">Camera</button>
+      <button data-action="view" data-name="selected">Frame Sel.</button>
+      <button data-action="view" data-name="all">Frame All</button>
+    </div>
+    <div class="label">Shading</div>
+    <div class="grid4 seg" id="shading">
+      <button data-action="shading" data-type="WIREFRAME">Wire</button>
+      <button data-action="shading" data-type="SOLID">Solid</button>
+      <button data-action="shading" data-type="MATERIAL">Mat.</button>
+      <button data-action="shading" data-type="RENDERED">Render</button>
+    </div>
+    <div class="label">Preview quality</div>
+    <div class="grid3 seg" id="quality">
+      <button data-w="480">Low</button>
+      <button data-w="720" class="on">Medium</button>
+      <button data-w="1080">High</button>
+    </div>
+    <div class="grid2">
+      <button data-action="view" data-name="persp">Persp / Ortho</button>
+      <button id="btn-invert">Invert orbit: off</button>
+    </div>
+  </div>
+
+  <div class="tab" data-tab="object">
+    <div class="row">
+      <select id="obj-select"></select>
+      <button id="btn-rename" class="icon">&#9998;</button>
+    </div>
+    <div class="label">Transform <span id="xf-name"></span></div>
+    <div class="seg grid3" id="xf-kind">
+      <button data-kind="move" class="on">Move</button>
+      <button data-kind="rotate">Rotate</button>
+      <button data-kind="scale">Scale</button>
+    </div>
+    <div class="seg grid4" id="xf-step"></div>
+    <div class="axes">
+      <div class="axis x"><span>X</span><button data-dir="-1">&minus;</button><output id="val-x">0</output><button data-dir="1">+</button></div>
+      <div class="axis y"><span>Y</span><button data-dir="-1">&minus;</button><output id="val-y">0</output><button data-dir="1">+</button></div>
+      <div class="axis z"><span>Z</span><button data-dir="-1">&minus;</button><output id="val-z">0</output><button data-dir="1">+</button></div>
+    </div>
+    <div class="grid3">
+      <button data-action="object" data-name="duplicate">Duplicate</button>
+      <button data-action="object" data-name="hide">Hide</button>
+      <button data-action="object" data-name="delete" class="danger">Delete</button>
+      <button data-action="object" data-name="shade_smooth">Smooth</button>
+      <button data-action="object" data-name="shade_flat">Flat</button>
+      <button data-action="unhide_all">Unhide All</button>
+      <button data-action="object" data-name="apply_transforms">Apply Xf</button>
+      <button data-action="object" data-name="origin_to_geometry">Origin&rarr;Geo</button>
+      <button data-action="select_all" data-state="false">Deselect</button>
+    </div>
+  </div>
+
+  <div class="tab" data-tab="add">
+    <div class="label">Mesh</div>
+    <div class="grid4">
+      <button data-action="add" data-kind="cube">Cube</button>
+      <button data-action="add" data-kind="sphere">Sphere</button>
+      <button data-action="add" data-kind="cylinder">Cylinder</button>
+      <button data-action="add" data-kind="plane">Plane</button>
+      <button data-action="add" data-kind="cone">Cone</button>
+      <button data-action="add" data-kind="torus">Torus</button>
+      <button data-action="add" data-kind="monkey">Monkey</button>
+      <button data-action="add" data-kind="empty">Empty</button>
+    </div>
+    <div class="label">Other</div>
+    <div class="grid2">
+      <button data-action="add" data-kind="light">Point Light</button>
+      <button data-action="add" data-kind="camera">Camera</button>
+    </div>
+  </div>
+
+  <div class="tab" data-tab="anim">
+    <div class="row">
+      <button id="btn-play" class="icon big">&#9654;</button>
+      <div class="frame-box">
+        <output id="frame-out">1</output>
+        <small id="frame-range">1 &ndash; 250</small>
+      </div>
+      <button data-action="frame" data-rel="-10" class="icon">&#171;</button>
+      <button data-action="frame" data-rel="-1" class="icon">&#8249;</button>
+      <button data-action="frame" data-rel="1" class="icon">&#8250;</button>
+      <button data-action="frame" data-rel="10" class="icon">&#187;</button>
+    </div>
+    <input id="frame-slider" type="range" min="1" max="250" value="1">
+    <div class="grid2">
+      <button data-action="frame" data-abs="start">Go to Start</button>
+      <button data-action="frame" data-abs="end">Go to End</button>
+    </div>
+  </div>
+
+  <div class="tab" data-tab="render">
+    <div class="row">
+      <select id="engine">
+        <option value="BLENDER_EEVEE_NEXT">EEVEE</option>
+        <option value="BLENDER_EEVEE">EEVEE (legacy)</option>
+        <option value="CYCLES">Cycles</option>
+        <option value="BLENDER_WORKBENCH">Workbench</option>
+      </select>
+      <span id="res" class="muted"></span>
+    </div>
+    <div class="grid2">
+      <button data-action="render" class="primary">Render Image</button>
+      <button data-action="render" data-animation="true">Render Animation</button>
+    </div>
+    <div id="render-status" class="muted">idle</div>
+    <img id="render-result" alt="" hidden>
+    <a id="render-download" hidden download="render.jpg">Open full size</a>
+  </div>
+
+</section>
+
+<nav id="tabs">
+  <button data-tab="view" class="on">View</button>
+  <button data-tab="object">Object</button>
+  <button data-tab="add">Add</button>
+  <button data-tab="anim">Anim</button>
+  <button data-tab="render">Render</button>
+</nav>
+
+<div id="toast"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
