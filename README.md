@@ -14,6 +14,19 @@ phone ──HTTP over LAN──▶ Blender addon (server thread) ──queue─�
 
 ## Install (Windows)
 
+**One command** (PowerShell, ideally "Run as Administrator" so it can add the firewall rule):
+
+```powershell
+irm https://raw.githubusercontent.com/khattak-k/khattak-k/claude/new-session-xzed82/install.ps1 | iex
+```
+
+Or from a clone: `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
+It finds `blender.exe`, copies the addon into `%APPDATA%\Blender Foundation\Blender\<ver>\scripts\addons`,
+enables it with autostart, adds the firewall rule, and prints the URL for your phone.
+Pass `-BlenderExe 'C:\...\blender.exe'` if it picks the wrong Blender.
+
+**Manually:**
+
 1. Build the zip (or grab `dist/blender_phone_control.zip` if you already have one):
    ```
    python build_zip.py
