@@ -288,6 +288,13 @@
     $$("#quality button").forEach((x) => x.classList.toggle("on", x === b));
     bumpPreview();
   }));
+  // Default quality from the screen: a 375px-wide phone at 3x DPR wants ~1080px, not 720.
+  {
+    const want = Math.round((vp.clientWidth || 360) * (window.devicePixelRatio || 1));
+    const btn = $$("#quality button").reduce((best, b) => Math.abs(Number(b.dataset.w) - want) < Math.abs(Number(best.dataset.w) - want) ? b : best);
+    previewWidth = Number(btn.dataset.w);
+    $$("#quality button").forEach((x) => x.classList.toggle("on", x === btn));
+  }
 
   const invBtn = $("#btn-invert");
   const paintInvert = () => { invBtn.textContent = "Invert orbit: " + (invertOrbit ? "on" : "off"); };
@@ -358,7 +365,7 @@
 
   function setClaude(online) {
     const el = $("#claude");
-    el.textContent = online ? "Claude listening" : "Claude not listening";
+    el.textContent = online ? "Claude" : "Claude offline";
     el.classList.toggle("on", !!online);
   }
 

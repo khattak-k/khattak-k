@@ -378,6 +378,13 @@ def capture_preview(width=720, quality=75):
         return cached
 
     window, area, region, space = _find_view3d()
+    if space.shading.type == "RENDERED":
+        # render.opengl can't reproduce a Cycles/EEVEE viewport render from a
+        # timer (it comes back black), so grab what is on the PC's screen instead.
+        data = _capture_screenshot(window, area, region, width, quality)
+        _preview_cache.update(bytes=data, time=now, width=width)
+        return data
+
     scene = bpy.context.scene
     r = scene.render
     img = r.image_settings
@@ -410,6 +417,31 @@ def capture_preview(width=720, quality=75):
 
     _preview_cache.update(bytes=data, time=now, width=width)
     return data
+
+
+def _capture_screenshot(window, area, region, width, quality):
+    """JPEG of the 3D Viewport area exactly as shown on the PC (any shading,
+    including an in-progress Cycles rendered view). Needs the Blender window
+    to be visible on screen; a minimized window may give a stale or black image."""
+    base = os.path.join(tempfile.gettempdir(), f"blender_phone_shot_{os.getpid()}")
+    png, jpg = base + ".png", base + ".jpg"
+    with bpy.context.temp_override(window=window, screen=window.screen, area=area, region=region):
+        bpy.ops.screen.screenshot_area(filepath=png)
+    img = bpy.data.images.load(png)
+    try:
+        w, h = img.size
+        if w > width:
+            img.scale(width, max(1, int(h * width / w)))
+        img.file_format = "JPEG"
+        img.filepath_raw = jpg
+        try:
+            img.save(filepath=jpg, quality=int(quality))
+        except TypeError:  # Blender < 3.4: save() takes no arguments
+            img.save()
+    finally:
+        bpy.data.images.remove(img)
+    with open(jpg, "rb") as f:
+        return f.read()
 
 
 # ---------------------------------------------------------------------------
