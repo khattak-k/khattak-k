@@ -68,6 +68,16 @@ class PHONE_OT_new_pin(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class PHONE_OT_clear_chat(bpy.types.Operator):
+    bl_idname = "phone_control.clear_chat"
+    bl_label = "Clear Chat"
+    bl_description = "Forget the phone/Claude chat history"
+
+    def execute(self, context):
+        server.clear_messages()
+        return {"FINISHED"}
+
+
 class PHONE_PT_panel(bpy.types.Panel):
     bl_label = "Phone Control"
     bl_space_type = "VIEW_3D"
@@ -89,12 +99,19 @@ class PHONE_PT_panel(bpy.types.Panel):
             row.operator("phone_control.stop", icon="PAUSE")
             row.operator("phone_control.new_pin", icon="FILE_REFRESH")
             layout.label(text=f"Connected phones: {status['sessions']}")
+            if status["claude_online"]:
+                layout.label(text="Claude: listening", icon="CHECKMARK")
+            else:
+                layout.label(text="Claude: not listening (claude_relay.py watch)", icon="ERROR")
+            row = layout.row()
+            row.label(text=f"Chat messages: {status['messages']}")
+            row.operator("phone_control.clear_chat", text="", icon="TRASH")
         else:
             layout.label(text="Server: stopped", icon="X")
             layout.operator("phone_control.start", icon="PLAY")
 
 
-classes = (PhoneControlPrefs, PHONE_OT_start, PHONE_OT_stop, PHONE_OT_new_pin, PHONE_PT_panel)
+classes = (PhoneControlPrefs, PHONE_OT_start, PHONE_OT_stop, PHONE_OT_new_pin, PHONE_OT_clear_chat, PHONE_PT_panel)
 
 
 def _autostart():
@@ -108,16 +125,31 @@ def _autostart():
     return None
 
 
+def _refresh_panel():
+    """Redraw the sidebar every few seconds so 'Claude: listening' stays current."""
+    try:
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == "VIEW_3D":
+                    area.tag_redraw()
+    except Exception:
+        pass
+    return 5.0
+
+
 def register():
     for c in classes:
         bpy.utils.register_class(c)
     ops.register_handlers()
     bpy.app.timers.register(_autostart, first_interval=1.0)
+    bpy.app.timers.register(_refresh_panel, first_interval=5.0, persistent=True)
 
 
 def unregister():
     server.stop()
     bridge.stop()
     ops.unregister_handlers()
+    if bpy.app.timers.is_registered(_refresh_panel):
+        bpy.app.timers.unregister(_refresh_panel)
     for c in reversed(classes):
         bpy.utils.unregister_class(c)

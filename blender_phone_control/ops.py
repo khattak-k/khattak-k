@@ -73,6 +73,7 @@ def get_state():
         "fps": scene.render.fps,
         "playing": playing,
         "engine": scene.render.engine,
+        "engines": available_engines(),
         "resolution": [scene.render.resolution_x, scene.render.resolution_y, scene.render.resolution_percentage],
         "mode": active.mode if active else "OBJECT",
         "active": _object_info(active),
@@ -288,13 +289,26 @@ def unhide_all():
 # Global / scene
 # ---------------------------------------------------------------------------
 
+def _undo_push(message):
+    """Operators run from a timer don't push undo steps, so record one per phone edit."""
+    try:
+        with bpy.context.temp_override(**_override()):
+            bpy.ops.ed.undo_push(message=message)
+    except Exception as e:
+        print("[Phone Control] undo push failed:", e)
+
+
 def undo():
     with bpy.context.temp_override(**_override()):
+        if not bpy.ops.ed.undo.poll():
+            raise RuntimeError("nothing to undo")
         bpy.ops.ed.undo()
 
 
 def redo():
     with bpy.context.temp_override(**_override()):
+        if not bpy.ops.ed.redo.poll():
+            raise RuntimeError("nothing to redo")
         bpy.ops.ed.redo()
 
 
@@ -315,7 +329,31 @@ def toggle_play():
         bpy.ops.screen.animation_play()
 
 
+_engines = None
+_ENGINE_CANDIDATES = ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "CYCLES", "BLENDER_WORKBENCH", "HYDRA_STORM")
+
+
+def available_engines():
+    """Engine identifiers this Blender accepts (names differ per version;
+    the enum is dynamic so probing is the only reliable way). Cached."""
+    global _engines
+    if _engines is None:
+        r = bpy.context.scene.render
+        saved, found = r.engine, []
+        for cand in _ENGINE_CANDIDATES:
+            try:
+                r.engine = cand
+            except TypeError:
+                continue
+            found.append(cand)
+        r.engine = saved
+        _engines = found
+    return _engines
+
+
 def set_engine(engine):
+    if engine not in available_engines():
+        raise ValueError(f"engine {engine!r} not available; choose from {', '.join(available_engines())}")
     bpy.context.scene.render.engine = engine
 
 
@@ -470,9 +508,15 @@ ACTIONS = {
 }
 
 
+# Actions that edit the scene get an undo step so the phone's Undo can revert them.
+_UNDOABLE = {"select", "select_all", "transform", "set_transform", "rename", "add", "object", "unhide_all"}
+
+
 def run_action(name, params):
     fn = ACTIONS.get(name)
     if fn is None:
         raise ValueError(f"unknown action {name!r}")
     fn(params or {})
+    if name in _UNDOABLE:
+        _undo_push(f"Phone: {name}")
     return get_state()

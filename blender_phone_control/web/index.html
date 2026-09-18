@@ -24,9 +24,11 @@
 <header id="top">
   <span id="file">&hellip;</span>
   <span id="conn" class="dot"></span>
-  <button id="btn-undo" data-action="undo" title="Undo">&#8630;</button>
-  <button id="btn-redo" data-action="redo" title="Redo">&#8631;</button>
-  <button id="btn-save" data-action="save" title="Save">&#9921;</button>
+  <span id="claude" class="muted"></span>
+  <button id="btn-undo" class="ctrl" data-action="undo" title="Undo">&#8630;</button>
+  <button id="btn-redo" class="ctrl" data-action="redo" title="Redo">&#8631;</button>
+  <button id="btn-save" class="ctrl" data-action="save" title="Save">&#9921;</button>
+  <button id="btn-controls" title="Show / hide controls">&#9881;</button>
 </header>
 
 <main id="viewport">
@@ -39,6 +41,16 @@
 </main>
 
 <section id="panel">
+
+  <div class="tab" data-tab="chat">
+    <div id="chat-thread">
+      <div id="chat-empty" class="muted">Tell Claude what to do in Blender.</div>
+    </div>
+    <form id="chat-form">
+      <textarea id="chat-text" rows="1" placeholder="Message Claude&hellip;" autocomplete="off" enterkeyhint="send"></textarea>
+      <button type="submit" class="primary" aria-label="Send">&#10148;</button>
+    </form>
+  </div>
 
   <div class="tab" data-tab="view">
     <div class="grid3">
@@ -141,12 +153,7 @@
 
   <div class="tab" data-tab="render">
     <div class="row">
-      <select id="engine">
-        <option value="BLENDER_EEVEE_NEXT">EEVEE</option>
-        <option value="BLENDER_EEVEE">EEVEE (legacy)</option>
-        <option value="CYCLES">Cycles</option>
-        <option value="BLENDER_WORKBENCH">Workbench</option>
-      </select>
+      <select id="engine"></select>
       <span id="res" class="muted"></span>
     </div>
     <div class="grid2">
@@ -161,11 +168,12 @@
 </section>
 
 <nav id="tabs">
-  <button data-tab="view" class="on">View</button>
-  <button data-tab="object">Object</button>
-  <button data-tab="add">Add</button>
-  <button data-tab="anim">Anim</button>
-  <button data-tab="render">Render</button>
+  <button data-tab="chat" class="on">Chat</button>
+  <button data-tab="view" class="ctrl">View</button>
+  <button data-tab="object" class="ctrl">Object</button>
+  <button data-tab="add" class="ctrl">Add</button>
+  <button data-tab="anim" class="ctrl">Anim</button>
+  <button data-tab="render" class="ctrl">Render</button>
 </nav>
 
 <div id="toast"></div>

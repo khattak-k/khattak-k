@@ -12,6 +12,7 @@
   try { invertOrbit = localStorage.getItem("bpc_invert") === "1"; } catch (_) {}
   const xf = { kind: "move", step: 0.1 };
   const STEPS = { move: [0.01, 0.1, 1, 10], rotate: [1, 5, 15, 90], scale: [1.01, 1.1, 1.5, 2] };
+  const ENGINE_LABELS = { BLENDER_EEVEE: "EEVEE", BLENDER_EEVEE_NEXT: "EEVEE", CYCLES: "Cycles", BLENDER_WORKBENCH: "Workbench", HYDRA_STORM: "Hydra Storm" };
 
   // ---------------------------------------------------------------- API
 
@@ -29,6 +30,7 @@
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "error");
     setConn(true);
+    if ("claude_online" in data) setClaude(data.claude_online);
     return data;
   }
 
@@ -122,6 +124,14 @@
 
     // render
     const eng = $("#engine");
+    const engines = s.engines || [];
+    if (eng.dataset.sig !== engines.join(",")) {
+      eng.dataset.sig = engines.join(",");
+      eng.innerHTML = "";
+      for (const id of engines) {
+        const opt = document.createElement("option"); opt.value = id; opt.textContent = ENGINE_LABELS[id] || id; eng.appendChild(opt);
+      }
+    }
     if (![...eng.options].some((o) => o.value === s.engine)) {
       const opt = document.createElement("option"); opt.value = s.engine; opt.textContent = s.engine; eng.appendChild(opt);
     }
@@ -326,6 +336,88 @@
   $("#frame-slider").addEventListener("input", (e) => { $("#frame-out").textContent = e.target.value; });
   $("#engine").addEventListener("change", (e) => action("engine", { engine: e.target.value }));
 
+  // Controls (all tabs except Chat, plus undo/redo/save) are hidden until the gear is toggled.
+  let controls = false;
+  try { controls = localStorage.getItem("bpc_controls") === "1"; } catch (_) {}
+  function paintControls() {
+    document.body.classList.toggle("controls", controls);
+    $("#btn-controls").classList.toggle("on", controls);
+    if (!controls) $("#tabs button[data-tab=chat]").click();
+  }
+  $("#btn-controls").addEventListener("click", () => {
+    controls = !controls;
+    try { localStorage.setItem("bpc_controls", controls ? "1" : "0"); } catch (_) {}
+    paintControls();
+  });
+  paintControls();
+
+  // ---------------------------------------------------------------- chat
+
+  const thread = $("#chat-thread"), chatText = $("#chat-text");
+  let lastMsgId = 0, chatPolling = false;
+
+  function setClaude(online) {
+    const el = $("#claude");
+    el.textContent = online ? "Claude listening" : "Claude not listening";
+    el.classList.toggle("on", !!online);
+  }
+
+  function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+
+  function addMessage(m, pending = false) {
+    $("#chat-empty").hidden = true;
+    const el = document.createElement("div");
+    el.className = `msg ${m.role}${pending ? " pending" : ""}`;
+    el.textContent = m.text;
+    if (!pending) {
+      const t = document.createElement("time");
+      t.textContent = (m.role === "claude" ? "Claude · " : "") + fmtTime(m.ts);
+      el.appendChild(t);
+    }
+    thread.appendChild(el);
+    thread.scrollTop = thread.scrollHeight;
+    return el;
+  }
+
+  async function pollMessages() {
+    if (chatPolling || !token || document.hidden) return;
+    chatPolling = true;
+    try {
+      const data = await api(`/api/messages?since=${lastMsgId}&wait=25`);
+      for (const m of data.messages) if (m.id > lastMsgId) { addMessage(m); lastMsgId = m.id; }
+    } catch (e) {
+      await new Promise((r) => setTimeout(r, 2000));
+    } finally {
+      chatPolling = false;
+      if (token && !document.hidden) pollMessages();
+    }
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollMessages(); });
+
+  function autosize() { chatText.style.height = "auto"; chatText.style.height = Math.min(chatText.scrollHeight, 120) + "px"; }
+  chatText.addEventListener("input", autosize);
+  chatText.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#chat-form").requestSubmit(); }
+  });
+
+  $("#chat-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const t = chatText.value.trim();
+    if (!t) return;
+    const pending = addMessage({ role: "phone", text: t }, true);
+    chatText.value = ""; autosize();
+    try {
+      const data = await api("/api/send", { body: { text: t } });
+      pending.remove();
+      if (data.message.id > lastMsgId) { addMessage(data.message); lastMsgId = data.message.id; }
+      if (!data.claude_online) toast("Sent, but Claude is not listening right now");
+    } catch (e) {
+      pending.remove();
+      chatText.value = t; autosize();
+      toast(e.message);
+    }
+  });
+
   let toastTimer;
   function toast(msg) {
     const t = $("#toast");
@@ -341,6 +433,10 @@
     pollState();
     stateTimer = setInterval(() => { if (!document.hidden) pollState(); }, 1500);
     fetchPreview();
+    lastMsgId = 0;
+    thread.querySelectorAll(".msg").forEach((n) => n.remove());
+    $("#chat-empty").hidden = false;
+    pollMessages();
   }
 
   (async () => {

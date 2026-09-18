@@ -74,13 +74,73 @@ def test_static_and_ping():
     code, body = req("/app.js", raw=True)
     assert code == 200 and b"use strict" in body
     code, body = req("/api/ping")
-    assert body == {"ok": True, "authed": False}
+    assert body["ok"] is True and body["authed"] is False and body["claude_online"] is False
 
 
 def test_auth_required():
     assert req("/api/state")[0] == 401
     assert req("/api/action", {"action": "undo"})[0] == 401
     assert req("/api/preview.jpg")[0] == 401
+
+
+def test_phone_message_reaches_inbox_and_reply_comes_back():
+    server.clear_messages()
+    tok = login()
+
+    code, body = req("/api/send", {"text": "  add a red cube  "}, token=tok)
+    assert code == 200 and body["message"]["role"] == "phone" and body["message"]["text"] == "add a red cube"
+    assert body["claude_online"] is False
+    mid = body["message"]["id"]
+
+    # Claude's relay (loopback, no token) sees only phone messages, and polling marks Claude online.
+    code, body = req("/api/inbox?since=0")
+    assert code == 200 and [m["id"] for m in body["messages"]] == [mid]
+    assert server.status()["claude_online"] is True
+    assert req("/api/inbox?since=%d" % mid)[1]["messages"] == []
+
+    code, body = req("/api/reply", {"text": "Done, cube added."})
+    assert code == 200 and body["message"]["role"] == "claude"
+    rid = body["message"]["id"]
+
+    code, body = req(f"/api/messages?since={mid}", token=tok)
+    assert [m["id"] for m in body["messages"]] == [rid] and body["claude_online"] is True
+    assert req(f"/api/inbox?since={mid}")[1]["messages"] == [], "relay must not see Claude's own replies"
+
+    assert req("/api/send", {"text": "   "}, token=tok)[0] == 400
+    assert req("/api/reply", {"text": ""})[0] == 400
+    assert req("/api/clear", {}, token=tok)[0] == 200
+    assert req("/api/messages?since=0", token=tok)[1]["messages"] == []
+
+
+def test_long_poll_wakes_on_new_message_and_stop_cuts_it():
+    server.clear_messages()
+    tok = login()
+    got = {}
+
+    def waiter(since):
+        try:
+            got[since] = req(f"/api/messages?since={since}&wait=20", token=tok, timeout=30)
+        except Exception as e:  # a cut connection is the expected outcome for the second waiter
+            got[since] = e
+
+    t = threading.Thread(target=waiter, args=(0,))
+    t.start()
+    t.join(0.3)
+    assert t.is_alive(), "long-poll should block while there are no messages"
+    req("/api/send", {"text": "hello"}, token=tok)
+    t.join(5)
+    assert not t.is_alive()
+    assert [m["text"] for m in got[0][1]["messages"]] == ["hello"]
+
+    t = threading.Thread(target=waiter, args=(99,))
+    t.start()
+    t.join(0.3)
+    assert t.is_alive()
+    server.stop()
+    t.join(3)
+    assert not t.is_alive(), "stop() must release/cut a pending long-poll"
+    server.start(PORT)
+    assert req("/api/ping")[0] == 200
 
 
 def test_wrong_pin_then_lockout():

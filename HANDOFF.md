@@ -1,61 +1,30 @@
 # Handoff — Blender Phone Control
 
-**Branch:** `claude/new-session-xzed82` on `khattak-k/khattak-k` (2 commits, pushed, no PR opened).
-**Goal:** use Blender on the Windows PC from a phone via a touch web UI served by a Blender addon.
+**Branch:** `claude/new-session-xzed82` on `khattak-k/khattak-k`. Local clone on the PC: `D:\Khattak Data\blender-phone-control`.
+**Goal:** from a phone, chat with the Claude Code session that drives Blender over MCP, watch the viewport, and optionally use touch controls.
 
-## State
+## State (2026-09-18)
 
-Built and pushed, but **never run against real Blender** — the dev session was a cloud container
-with no Blender. Everything that touches `bpy` is written to the documented API and unverified.
-The HTTP/auth/bridge layers *are* tested (`python -m pytest tests/`, 5/5 pass, fake `bpy`).
+Verified against real Blender 5.2 on the Windows PC (previous sessions had no Blender):
 
-```
-blender_phone_control/   the addon (install this folder / zip)
-  __init__.py            registration, prefs (port, autostart), N-panel "Phone" tab
-  bridge.py              queue + bpy.app.timers → runs work on Blender's main thread
-  server.py              ThreadingHTTPServer, PIN → token auth, lockout, static files
-  ops.py                 every action the phone can trigger (ACTIONS dict at bottom)
-  web/                   phone UI: index.html, style.css, app.js (no build step)
-tests/                   fake_bpy.py + test_server.py
-install.ps1              one-command Windows installer (untested: no PowerShell in dev container)
-build_zip.py             → dist/blender_phone_control.zip
-README.md                install / usage / troubleshooting
-```
+- `install.ps1` works (finds 5.2, copies, enables, autostart on; firewall rule needs admin).
+- Login, PIN lockout, state, viewport preview (`render.opengl` from the timer, no popup), orbit/pan/zoom, view presets, shading, select, nudges, add primitives, duplicate/delete, play, engine switch, final render + JPEG result: all OK.
+- Orbit math matches Blender's turntable drag exactly (checked against the source convention and numerically).
+- Fixed: undo failed because timer-run operators push no undo steps → `ops.run_action` now pushes one per editing action; undo/redo report "nothing to undo" instead of a poll error.
+- Fixed: engine names are probed at runtime (`ops.available_engines`) and sent in state; 5.2 has `BLENDER_EEVEE`, `BLENDER_WORKBENCH`, `CYCLES`.
+- Fixed: `server.stop()` now closes live keep-alive/long-poll sockets; before, handler threads kept answering with the old code after an addon reload.
+- Added: chat. `/api/send` + `/api/messages` (phone, PIN-authed, long-poll) and `/api/inbox` + `/api/reply` (loopback only). `claude_relay.py watch` prints each phone message as one line; Claude runs it under Monitor so every message wakes the session; `claude_relay.py reply "..."` posts back. The page opens on the Chat tab; the gear in the header toggles the control tabs and undo/redo/save.
 
-## Next steps (in order)
+Tests: `python -m pytest tests/` → 7 pass (fake bpy; the chat layer is fully covered, Blender-side ops are not).
 
-1. **Install on the PC.** Admin PowerShell:
-   `irm https://raw.githubusercontent.com/khattak-k/khattak-k/claude/new-session-xzed82/install.ps1 | iex`
-   (needs the repo public; otherwise clone and run `.\install.ps1`). Fall back to manual:
-   `python build_zip.py` → Preferences ▸ Add-ons ▸ Install from Disk.
-2. **Smoke test in Blender.** Window ▸ Toggle System Console first so tracebacks are visible.
-   N ▸ Phone ▸ Start Server. On the PC itself open `http://127.0.0.1:8765`, enter PIN.
-   Check in this order — each is a separate risk:
-   - page loads + login → server.py OK
-   - viewport image appears → `ops.capture_preview` (`render.opengl` + `temp_override`) OK
-   - drag orbits → `view_orbit` quaternion math + sign; toggle *Invert orbit* if backwards
-   - Object tab nudges move the cube → `transform` + `_ensure_object_mode`
-   - Add ▸ Cube → operators under `temp_override(**_override())`
-   - Render Image → `INVOKE_DEFAULT` render + `render_complete` handler saving JPEG
-3. **Then from the phone** on the same Wi-Fi. If it can't connect: firewall rule / network must be *Private*.
+## To pick this up in a new session
 
-## Known unknowns / likely first bugs
+1. Blender open with the addon (autostart) → N ▸ Phone shows the PIN and "Claude: listening/not listening".
+2. Arm the relay: `Monitor` tool with `python -u claude_relay.py watch` (30 min max, re-arm on expiry). Each event is `[phone #N] text`: that is the user talking from their phone. Act on it via the Blender MCP, then `python claude_relay.py reply "…"`.
+3. Phone: `http://192.168.1.8:8765` (PC's LAN address at time of writing).
 
-- `render_display_type = "NONE"` during preview: if a render window still pops, or preview
-  errors, check `bpy.context.preferences.view` access from a timer.
-- `render.opengl(view_context=True)` needs `window/screen/area/region` in the override;
-  if it complains about context, also pass `space_data`.
-- Engine names differ by version (`BLENDER_EEVEE` vs `BLENDER_EEVEE_NEXT`); UI adds unknown
-  ones to the dropdown, so an error here is cosmetic.
-- Does `render_complete` fire for viewport (opengl) renders? Guarded by `_expecting_render`
-  and by pausing previews while a render runs, so it should be safe — verify.
-- Undo from a timer (`bpy.ops.ed.undo`) can be flaky in some versions.
-- `_autostart` timer reads addon prefs 1 s after register; harmless if it fails (prints).
+## Not yet verified
 
-## Conventions
-
-- Phone can only call names in `ops.ACTIONS`; never expose arbitrary Python.
-- Anything touching `bpy` goes through `bridge.submit` — never from the HTTP thread.
-- Errors from ops surface as HTTP 400 + toast on phone (last line); full traceback in Blender console.
-- Adding an action: function in `ops.py` → `ACTIONS` entry → `data-action` button in `index.html`.
-- Commits so far include a `Co-Authored-By` / `Claude-Session` trailer; keep or drop as you like.
+- Access from an actual phone over Wi‑Fi (firewall rule / Private network). Everything so far was tested from the PC's own browser.
+- `Render Animation` (only still renders were run).
+- Blender was force-restarted once during testing; if the user had unsaved work in the instance launched at ~05:05, it was lost.
